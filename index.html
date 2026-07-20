@@ -1256,7 +1256,7 @@ setTimeout(()=>{ const u=document.getElementById('login-user'); if(u && !u.disab
 // ════════════════════════════════════════════════════════
 // GOOGLE SHEETS LOADER (gviz JSON endpoint)
 // ════════════════════════════════════════════════════════
-const SHEETS_ID = "1kRARELSkAE8-d5eLJm0cEe9ENfbPZTU3fZ4YIvEfBzU";
+const SHEETS_ID = "1uYWzzbdqzUQx5OIevIGDpLhwHRE9SAHl9arAwMfc728";
 // ── REGISTRO CENTRAL DE EMPREENDIMENTOS ──
 // Para adicionar um novo empreendimento à planilha: inclua um item abaixo.
 // O código vai gerar automaticamente: EK, SHEETS_TABS, EMP_NAMES, PR_TABS.
@@ -1309,7 +1309,7 @@ let D = (() => {
 // Contratos e NN: abas da planilha principal
 // Tentamos múltiplas variantes do nome para resistir a diferenças de encoding/case
 const CONTRACTS_TAB_VARIANTS = ["MEDIÇÕES","MEDICOES","Medições","medições","MEDIçÕES","MEDICÕES"];
-const NN_TAB_VARIANTS = ["ACOMPANHAMENTO NN","Acompanhamento NN","acompanhamento nn","ACOMPANHAMENTO  NN"];
+const NN_TAB_VARIANTS = ["PROSPECÇÃO DE NEGÓCIOS","PROSPECCAO DE NEGOCIOS","Prospecção de Negócios","ACOMPANHAMENTO NN","Acompanhamento NN","acompanhamento nn","ACOMPANHAMENTO  NN"];
 
 function _gvizUrlForTab(tabName){
   // Listar colunas explicitamente (A..Z) faz o gviz executar a query contra os
@@ -1645,7 +1645,7 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v10";
+const CACHE_KEY = "conviver_sheets_cache_v11";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
