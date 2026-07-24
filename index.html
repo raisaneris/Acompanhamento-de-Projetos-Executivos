@@ -1162,7 +1162,7 @@ setTimeout(()=>{ const u=document.getElementById('login-user'); if(u && !u.disab
     </div>
   </div>
 
-  <button type="button" role="tab" class="tab-btn" onclick="showTab('GE',this)">Gestão Emp.</button>
+  <button type="button" role="tab" class="tab-btn" onclick="showTab('GE',this)">Prospecção Neg.</button>
   <button type="button" role="tab" class="tab-btn" onclick="showTab('DVT',this)">Acomp. DVT</button>
   <button type="button" role="tab" class="tab-btn" onclick="showTab('NN',this)">Acomp. NN</button>
   <button type="button" role="tab" class="tab-btn" onclick="showTab('CTR',this)">Contratos &amp; Med.</button>
@@ -1284,7 +1284,7 @@ const EMPREENDIMENTOS = [
 
 const SHEETS_TABS = Object.fromEntries([
   ...EMPREENDIMENTOS.map(e => [e.code, e.sheetTab]),
-  ['GE', 'GE'],
+  ['GE', 'PROSPECÇÃO DE NEGÓCIOS'],
   ['DVT', 'ACOMPANHAMENTO DVT'],
 ]);
 // Abas de pranchas por empreendimento (RIV_PR, CTM_PR, etc.)
@@ -1293,13 +1293,13 @@ const PR_TABS = Object.fromEntries(
 );
 const EMP_NAMES = Object.fromEntries([
   ...EMPREENDIMENTOS.map(e => [e.code, e.name]),
-  ['GE', 'GESTÃO DE EMPREENDIMENTOS'],
+  ['GE', 'PROSPECÇÃO DE NEGÓCIOS'],
 ]);
 
 let D = (() => {
   const d = {};
   EMPREENDIMENTOS.forEach(e => d[e.code] = {name: e.name, rows: []});
-  d.GE = {name: "GESTÃO DE EMPREENDIMENTOS", rows: []};
+  d.GE = {name: "PROSPECÇÃO DE NEGÓCIOS", rows: []};
   d.DVT = [];
   return d;
 })();
@@ -1309,7 +1309,7 @@ let D = (() => {
 // Contratos e NN: abas da planilha principal
 // Tentamos múltiplas variantes do nome para resistir a diferenças de encoding/case
 const CONTRACTS_TAB_VARIANTS = ["MEDIÇÕES","MEDICOES","Medições","medições","MEDIçÕES","MEDICÕES"];
-const NN_TAB_VARIANTS = ["PROSPECÇÃO DE NEGÓCIOS","PROSPECCAO DE NEGOCIOS","Prospecção de Negócios","ACOMPANHAMENTO NN","Acompanhamento NN","acompanhamento nn","ACOMPANHAMENTO  NN"];
+const NN_TAB_VARIANTS = ["ESTUDOS DE TERRENOS","ESTUDO DE TERRENOS","Estudos de Terrenos","estudos de terrenos","ESTUDOS DE TERRENO"];
 
 function _gvizUrlForTab(tabName){
   // Listar colunas explicitamente (A..Z) faz o gviz executar a query contra os
@@ -1645,7 +1645,7 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v11";
+const CACHE_KEY = "conviver_sheets_cache_v12";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
@@ -2737,7 +2737,7 @@ function applyFLegacy(key, statusOverride){
     const r=D[key].rows[i];let show=true;
     // Dropdown filters
     Object.entries(crit).forEach(([f,v])=>{if(v==='ALL')return;if((r[f]||'')!==v)show=false;});
-    // Status override: Gestão Emp. (legacy) inclui AB. N/A é ignorado.
+    // Status override: Prospecção Neg. (layout legacy) inclui AB. N/A é ignorado.
     if(statusOverride&&statusOverride!=='ALL'){
       const stages=['ep','ap','pl','pe','ab'];
       const match=stages.some(f=>{
@@ -4446,7 +4446,7 @@ function runGlobalSearch(q){
   // Labels curtos derivados do registro central. GE tem label manual.
   const EMP_LABELS = Object.fromEntries([
     ...EMPREENDIMENTOS.map(e => [e.code, e.name.split(' ')[0]]),
-    ['GE', 'Gestão'],
+    ['GE', 'Prospecção'],
   ]);
   Object.keys(D).forEach(k=>{
     const rows = D[k]?.rows || [];
