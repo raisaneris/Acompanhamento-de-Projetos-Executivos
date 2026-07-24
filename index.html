@@ -1645,7 +1645,7 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v13";
+const CACHE_KEY = "conviver_sheets_cache_v14";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
@@ -1739,28 +1739,41 @@ function parseEmpSheet(gviz, isGE){
 }
 
 // PROSPECÇÃO DE NEGÓCIOS layout:
-// col 0: STATUS, 1: PROJETOS, 2: PASTA, 3: TERRENO, 4: FORNECEDOR, 5: PRAZO, 6: OBSERVAÇÃO
+// col 0 (A) = vazia; a tabela começa em B.
+// col 1: STATUS, 2: PROJETOS, 3: PASTA, 4: TERRENO, 5: FORNECEDOR, 6: PRAZO, 7: OBSERVAÇÃO
 // Linha 3 = cabeçalho, dados a partir da linha 4
 function parsePNSheet(gviz){
-  const headerIdx = {status:0,projeto:1,pasta:2,terreno:3,fornecedor:4,prazo:5,obs:6};
-  const rawRows = _gvizRowsToObjects(gviz, headerIdx);
+  const rawAll = _gvizRowsToObjects(gviz, {
+    c0:0,c1:1,c2:2,c3:3,c4:4,c5:5,c6:6,c7:7
+  });
+
+  // Detecta em qual coluna está o cabeçalho "STATUS" para resistir a deslocamentos
+  let base = 1; // padrão: começa em B
+  for(const r of rawAll){
+    for(let i=0;i<=4;i++){
+      if((r['c'+i]||"").trim().toUpperCase()==="STATUS"){ base=i; break; }
+    }
+    if((r['c'+base]||"").trim().toUpperCase()==="STATUS") break;
+  }
+
+  const F = n => 'c'+(base+n);
   const out = [];
-  rawRows.forEach(r=>{
+  rawAll.forEach(r=>{
     const anyVal = Object.values(r).some(v=>v && String(v).trim()!=="");
     if(!anyVal) return;
-    // Descarta a linha de cabeçalho, caso o gviz a traga como dado
-    if((r.status||"").trim().toUpperCase()==="STATUS") return;
-    if((r.projeto||"").trim().toUpperCase()==="PROJETOS") return;
+    const rawStatus = (r[F(0)]||"").trim().toUpperCase();
+    const rawProj   = (r[F(1)]||"").trim().toUpperCase();
+    if(rawStatus==="STATUS" || rawProj==="PROJETOS") return;
     const rec = {
-      status:_normStatus(r.status),
-      projeto:_cleanText(r.projeto), pasta:_cleanText(r.pasta),
-      terreno:_cleanText(r.terreno), fornecedor:_cleanText(r.fornecedor),
-      prazo:_cleanText(r.prazo), obs:_cleanText(r.obs)
+      status:_normStatus(r[F(0)]),
+      projeto:_cleanText(r[F(1)]), pasta:_cleanText(r[F(2)]),
+      terreno:_cleanText(r[F(3)]), fornecedor:_cleanText(r[F(4)]),
+      prazo:_cleanText(r[F(5)]), obs:_cleanText(r[F(6)])
     };
-    // Ignora linhas sem qualquer conteúdo útil
     if(!rec.status && !rec.projeto && !rec.terreno && !rec.pasta) return;
     out.push(rec);
   });
+  try{ console.log(`[PN] coluna base=${base} | linhas cruas=${rawAll.length} | linhas válidas=${out.length}`, out[0]||null); }catch(e){}
   return out;
 }
 
