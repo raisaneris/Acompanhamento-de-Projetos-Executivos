@@ -1685,7 +1685,7 @@ async function fetchPNSheet(){
   return _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v18";
+const CACHE_KEY = "conviver_sheets_cache_v19";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
@@ -1893,6 +1893,37 @@ async function fetchSheet(tabName){
   }
 }
 
+// Limpa automaticamente caches de versões anteriores do dashboard.
+// Sem isso, um cache antigo (com estrutura defasada) pode ser servido
+// indefinidamente e mascarar atualizações do código.
+(function _purgeOldCaches(){
+  try{
+    for(let i = localStorage.length - 1; i >= 0; i--){
+      const k = localStorage.key(i);
+      if(k && k.startsWith("conviver_sheets_cache_") && k !== CACHE_KEY){
+        localStorage.removeItem(k);
+        console.log("[CACHE] removido cache antigo:", k);
+      }
+    }
+  }catch(e){}
+})();
+
+// Um cache só é considerado válido se contiver TODOS os empreendimentos
+// atuais e a aba de Prospecção. Assim, mudanças no registro invalidam
+// o cache sozinhas, sem exigir limpeza manual pelo usuário.
+function _cacheIsCompatible(cached){
+  if(!cached || !cached.data) return false;
+  const d = cached.data;
+  for(const k of EK){
+    if(!d[k] || !Array.isArray(d[k].rows)) return false;
+  }
+  if(!d.GE || !Array.isArray(d.GE.rows)) return false;
+  // Se a Prospecção está vazia no cache, prefere buscar de novo:
+  // é o sintoma clássico de cache gravado antes da correção.
+  if(d.GE.rows.length === 0) return false;
+  return true;
+}
+
 async function loadFromSheets(forceRefresh){
   // Try cache first
   if(!forceRefresh){
@@ -1900,8 +1931,12 @@ async function loadFromSheets(forceRefresh){
       const raw = localStorage.getItem(CACHE_KEY);
       if(raw){
         const cached = JSON.parse(raw);
-        if(cached && (Date.now()-cached.ts) < CACHE_TTL){
+        if(cached && (Date.now()-cached.ts) < CACHE_TTL && _cacheIsCompatible(cached)){
           return {data:cached.data, contracts:(cached.contracts||null), nn:(cached.nn||null), fromCache:true, ts:cached.ts};
+        }
+        if(cached && !_cacheIsCompatible(cached)){
+          console.log("[CACHE] cache incompatível ou incompleto — recarregando da planilha");
+          try{ localStorage.removeItem(CACHE_KEY); }catch(e){}
         }
       }
     } catch(e){}
