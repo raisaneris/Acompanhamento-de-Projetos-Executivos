@@ -1645,7 +1645,7 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v12";
+const CACHE_KEY = "conviver_sheets_cache_v13";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
@@ -1734,6 +1734,32 @@ function parseEmpSheet(gviz, isGE){
       prazo:_cleanText(r.prazo), obs:_cleanText(r.obs),
       ...(isGE?{extra:_cleanText(r.extra)}:{})
     });
+  });
+  return out;
+}
+
+// PROSPECÇÃO DE NEGÓCIOS layout:
+// col 0: STATUS, 1: PROJETOS, 2: PASTA, 3: TERRENO, 4: FORNECEDOR, 5: PRAZO, 6: OBSERVAÇÃO
+// Linha 3 = cabeçalho, dados a partir da linha 4
+function parsePNSheet(gviz){
+  const headerIdx = {status:0,projeto:1,pasta:2,terreno:3,fornecedor:4,prazo:5,obs:6};
+  const rawRows = _gvizRowsToObjects(gviz, headerIdx);
+  const out = [];
+  rawRows.forEach(r=>{
+    const anyVal = Object.values(r).some(v=>v && String(v).trim()!=="");
+    if(!anyVal) return;
+    // Descarta a linha de cabeçalho, caso o gviz a traga como dado
+    if((r.status||"").trim().toUpperCase()==="STATUS") return;
+    if((r.projeto||"").trim().toUpperCase()==="PROJETOS") return;
+    const rec = {
+      status:_normStatus(r.status),
+      projeto:_cleanText(r.projeto), pasta:_cleanText(r.pasta),
+      terreno:_cleanText(r.terreno), fornecedor:_cleanText(r.fornecedor),
+      prazo:_cleanText(r.prazo), obs:_cleanText(r.obs)
+    };
+    // Ignora linhas sem qualquer conteúdo útil
+    if(!rec.status && !rec.projeto && !rec.terreno && !rec.pasta) return;
+    out.push(rec);
   });
   return out;
 }
@@ -1835,7 +1861,7 @@ async function loadFromSheets(forceRefresh){
     const res = empResults[i];
     if(res.status === "fulfilled"){
       try {
-        newD[key] = {name: EMP_NAMES[key], rows: parseEmpSheet(res.value, key==="GE"), pranchas: []};
+        newD[key] = {name: EMP_NAMES[key], rows: (key==="GE" ? parsePNSheet(res.value) : parseEmpSheet(res.value, false)), pranchas: []};
         return;
       } catch(e){
         console.error(`Erro ao parsear aba ${SHEETS_TABS[key]}:`, e);
@@ -2614,6 +2640,143 @@ function drawGaugeAnim(canvas,targetPct){
   requestAnimationFrame(step);
 }
 
+// ── PROSPECÇÃO DE NEGÓCIOS (tabela plana: STATUS/PROJETOS/PASTA/TERRENO/FORNECEDOR/PRAZO/OBSERVAÇÃO) ──
+function buildPN(key){
+  const emp=D[key], rows=emp.rows||[];
+  const cnt = {c:0,a:0,n:0};
+  rows.forEach(r=>{ if(r.status===C) cnt.c++; else if(r.status===A) cnt.a++; else if(r.status===N) cnt.n++; });
+
+  function uniq(f){
+    const vals=[...new Set(rows.map(r=>r[f]||'').filter(Boolean))].sort();
+    return['ALL',...vals].map(v=>`<option value="${v}">${v==='ALL'?'Todos':v}</option>`).join('');
+  }
+
+  let flt=`<div class="fbar" id="fb-${key}"><span class="fl">Filtrar:</span>`;
+  flt+=`<div class="fg"><span class="fl">Terreno</span>
+    <select class="fs" data-key="${key}" data-field="terreno" onchange="applyFPN('${key}')">${uniq('terreno')}</select></div>`;
+  flt+=`<div class="fg"><span class="fl">Pasta</span>
+    <select class="fs" data-key="${key}" data-field="pasta" onchange="applyFPN('${key}')">${uniq('pasta')}</select></div>`;
+  flt+=`<div class="fg"><span class="fl">Fornecedor</span>
+    <select class="fs" data-key="${key}" data-field="fornecedor" onchange="applyFPN('${key}')">${uniq('fornecedor')}</select></div>`;
+  flt+=`<div class="fg"><span class="fl">Status</span>
+    <select class="fs" id="st-filter-${key}" data-key="${key}" data-field="status" onchange="applyFPN('${key}')">
+      <option value="ALL">Todos</option>
+      <option value="${C}">Concluido</option>
+      <option value="${A}">Em Andamento</option>
+      <option value="${N}">Nao Iniciado</option>
+    </select></div>`;
+  flt+=`<button class="fb" onclick="resetFPN('${key}')">&#8635; Limpar</button>`;
+  flt+=`<span class="filter-badge" id="fbadge-${key}" style="display:none"></span>`;
+  flt+=`</div>`;
+
+  const cols=[
+    {f:'status',l:'Status',st:true},{f:'projeto',l:'Projetos'},
+    {f:'pasta',l:'Pasta'},{f:'terreno',l:'Terreno'},
+    {f:'fornecedor',l:'Fornecedor'},{f:'prazo',l:'Prazo'},{f:'obs',l:'Observacao'},
+  ];
+
+  let th=`<thead><tr>`;
+  cols.forEach(c=>th+=`<th${c.st?' class="sc"':''}>${c.l}</th>`);
+  th+=`</tr></thead>`;
+
+  let tb=`<tbody id="tb-${key}">`;
+  rows.forEach((r,i)=>{
+    const rowClass = r.status===A ? 'pulse-row' : '';
+    const hasObs = r.obs && r.obs.trim();
+    tb+=`<tr class="${rowClass}" data-i="${i}" onclick="toggleDetail('${key}',${i})">`;
+    cols.forEach(c=>{
+      if(c.st) tb+=`<td>${pill(r[c.f])}</td>`;
+      else if(c.f==='projeto') tb+=`<td class="tp">${r.projeto||''}</td>`;
+      else if(c.f==='obs') tb+=`<td class="to">${r.obs||''}</td>`;
+      else if(c.f==='prazo') tb+=`<td class="tm">${r.prazo||'-'}</td>`;
+      else tb+=`<td>${r[c.f]||'-'}</td>`;
+    });
+    tb+=`</tr>`;
+    if(hasObs){
+      tb+=`<tr class="row-detail" id="detail-${key}-${i}">
+        <td colspan="${cols.length}">
+          <div class="row-detail-inner">
+            <div class="rd-item"><span class="rd-label">Projeto</span><span class="rd-value">${r.projeto||'-'}</span></div>
+            <div class="rd-item"><span class="rd-label">Terreno</span><span class="rd-value">${r.terreno||'-'}</span></div>
+            <div class="rd-item"><span class="rd-label">Fornecedor</span><span class="rd-value">${r.fornecedor||'-'}</span></div>
+            <div class="rd-item"><span class="rd-label">Prazo</span><span class="rd-value">${r.prazo||'-'}</span></div>
+            <div class="rd-item"><span class="rd-label">Observacao</span><span class="rd-value">${r.obs}</span></div>
+          </div>
+        </td>
+      </tr>`;
+    }
+  });
+  tb+=`</tbody>`;
+
+  const terrenos = new Set(rows.map(r=>r.terreno).filter(Boolean)).size;
+  document.getElementById('page-'+key).innerHTML=`
+    <div class="emp-hdr reveal">
+      <div class="emp-nm">${emp.name}</div>
+      <div class="emp-stats">
+        <div class="es es-click" title="Mostrar todos" onclick="filterByStatusPN('${key}','ALL')">
+          <div class="es-n">${rows.length}</div><div class="es-l">Projetos</div>
+        </div>
+        <div class="es es-click" title="Ver somente Concluidos" onclick="filterByStatusPN('${key}','${C}')">
+          <div class="es-n">${cnt.c}</div><div class="es-l">Concluidos</div>
+        </div>
+        <div class="es y es-click" title="Ver somente Em Andamento" onclick="filterByStatusPN('${key}','${A}')">
+          <div class="es-n">${cnt.a}</div><div class="es-l">Em Andamento</div>
+        </div>
+        <div class="es r es-click" title="Ver somente Nao Iniciados" onclick="filterByStatusPN('${key}','${N}')">
+          <div class="es-n">${cnt.n}</div><div class="es-l">Nao Iniciados</div>
+        </div>
+        <div class="es b">
+          <div class="es-n">${terrenos}</div><div class="es-l">Terrenos</div>
+        </div>
+      </div>
+    </div>
+    ${flt}
+    <div class="tw reveal"><table>${th}${tb}</table></div>`;
+}
+
+function applyFPN(key, statusOverride){
+  const rows=D[key].rows||[];
+  const sels=[...document.querySelectorAll(`#fb-${key} select`)];
+  const f={};
+  sels.forEach(s=>{ f[s.dataset.field]=s.value; });
+  if(statusOverride!==undefined){
+    f.status = statusOverride;
+    const stSel=document.getElementById('st-filter-'+key);
+    if(stSel) stSel.value = statusOverride;
+  }
+  const tb=document.getElementById('tb-'+key);
+  if(!tb) return;
+  let shown=0;
+  rows.forEach((r,i)=>{
+    let ok=true;
+    Object.keys(f).forEach(fld=>{
+      const v=f[fld];
+      if(v==null||v==='ALL') return;
+      if((r[fld]||'')!==v) ok=false;
+    });
+    const tr=tb.querySelector(`tr[data-i="${i}"]`);
+    if(tr) tr.style.display = ok?'':'none';
+    const dt=document.getElementById(`detail-${key}-${i}`);
+    if(dt && !ok) dt.classList.remove('open');
+    if(ok) shown++;
+  });
+  const badge=document.getElementById('fbadge-'+key);
+  if(badge){
+    const active = Object.values(f).some(v=>v && v!=='ALL');
+    if(active){ badge.style.display=''; badge.textContent=`${shown} de ${rows.length}`; }
+    else badge.style.display='none';
+  }
+}
+
+function filterByStatusPN(key, status){
+  applyFPN(key, status);
+}
+
+function resetFPN(key){
+  document.querySelectorAll(`#fb-${key} select`).forEach(s=>s.value='ALL');
+  applyFPN(key, 'ALL');
+}
+
 // ── EMP PAGES ──
 function buildEmpLegacy(key){
   const emp=D[key],rows=emp.rows,isGE=key==='GE';
@@ -3089,19 +3252,19 @@ function resetFV2(key){
 // ── DISPATCH: Riviera/Costamare/Exclusive Tianguá/Kennedy/Marcos Luciano/Jane Broder
 //    use the index.html layout (V2). GE keeps the conviver legacy rendering. ──
 function buildEmp(key){
-  if(key==='GE') return buildEmpLegacy(key);
+  if(key==='GE') return buildPN(key);
   return buildEmpV2(key);
 }
 function applyF(key, statusOverride){
-  if(key==='GE') return applyFLegacy(key, statusOverride);
+  if(key==='GE') return applyFPN(key, statusOverride);
   return applyFV2(key, statusOverride);
 }
 function filterByStatus(key, status){
-  if(key==='GE') return filterByStatusLegacy(key, status);
+  if(key==='GE') return filterByStatusPN(key, status);
   return filterByStatusV2(key, status);
 }
 function resetF(key){
-  if(key==='GE') return resetFLegacy(key);
+  if(key==='GE') return resetFPN(key);
   return resetFV2(key);
 }
 
