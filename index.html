@@ -1658,7 +1658,34 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v17";
+// gid da aba PROSPECÇÃO DE NEGÓCIOS. Buscar por gid é imune a variações de
+// nome (singular/plural, acentuação, espaços), ao contrário do parâmetro sheet=.
+const PN_GID = "1049285644";
+
+function _gvizUrlForGid(gid){
+  const q = "select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z";
+  return `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(gid)}&tq=${encodeURIComponent(q)}`;
+}
+
+// Busca a aba de Prospecção: primeiro por gid; se falhar, tenta os nomes.
+async function fetchPNSheet(){
+  try {
+    const resp = await fetch(_gvizUrlForGid(PN_GID), {cache:"no-store"});
+    if(resp.ok){
+      const text = await resp.text();
+      if(!(text.includes('"status":"error"') && text.includes('not_found'))){
+        console.log(`[PN] sucesso usando gid=${PN_GID}`);
+        return _parseGviz(text);
+      }
+    }
+    console.warn(`[PN] gid=${PN_GID} não retornou dados; tentando por nome.`);
+  } catch(e){
+    console.warn("[PN] falha ao buscar por gid:", e.message);
+  }
+  return _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS");
+}
+
+const CACHE_KEY = "conviver_sheets_cache_v18";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
@@ -1890,7 +1917,7 @@ async function loadFromSheets(forceRefresh){
   const empKeys = [...EK, "GE"];
   const [empResults, dvtResult, ctrResult, nnResult] = await Promise.all([
     Promise.allSettled(empKeys.map(key => key==="GE"
-      ? _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS")
+      ? fetchPNSheet()
           .catch(e => { console.warn("[PN] aba não encontrada, seguindo sem ela:", e.message);
                         return {table:{rows:[]}}; })
       : fetchSheet(SHEETS_TABS[key]))),
