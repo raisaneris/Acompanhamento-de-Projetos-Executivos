@@ -1280,6 +1280,11 @@ const EMPREENDIMENTOS = [
   { code:'TII', name:'TIANGUÁ II',        sheetTab:'TIAII' },
   { code:'BII', name:'BARREIRINHAS II',   sheetTab:'BARII' },
   { code:'SPT', name:'SÍTIO PASSATEMPO',  sheetTab:'THZMC' },
+  { code:'TAG', name:'TIANGUÁ AG',        sheetTab:'TIAAG' },
+  { code:'RPA', name:'RAPOSA ARMANDO',    sheetTab:'RPARM' },
+  { code:'SLI', name:'SÃO LUÍS ILHA RACE',sheetTab:'SLIRC' },
+  { code:'CRL', name:'CARIRI LIFE',       sheetTab:'CARLF' },
+  { code:'ZDT', name:'ZÉ DANTAS',         sheetTab:'ZEDAT' },
 ];
 
 const SHEETS_TABS = Object.fromEntries([
@@ -1653,7 +1658,7 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v16";
+const CACHE_KEY = "conviver_sheets_cache_v17";
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
