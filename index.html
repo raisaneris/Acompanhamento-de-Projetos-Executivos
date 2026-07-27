@@ -1289,7 +1289,7 @@ const EMPREENDIMENTOS = [
 
 const SHEETS_TABS = Object.fromEntries([
   ...EMPREENDIMENTOS.map(e => [e.code, e.sheetTab]),
-  ['GE', 'PROSPECÇÃO DE NEGÓCIOS'],
+  ['GE', 'PROSPECCAO NEG.'],
   ['DVT', 'ACOMPANHAMENTO DVT'],
 ]);
 // Abas de pranchas por empreendimento (RIV_PR, CTM_PR, etc.)
@@ -1316,6 +1316,7 @@ let D = (() => {
 const CONTRACTS_TAB_VARIANTS = ["MEDIÇÕES","MEDICOES","Medições","medições","MEDIçÕES","MEDICÕES"];
 // Aba de Prospecção: nome varia entre singular/plural e acentuação na planilha.
 const PN_TAB_VARIANTS = [
+  "PROSPECCAO NEG.","PROSPECÇÃO NEG.","Prospecção Neg.","Prospeccao Neg.",
   "PROSPECÇÕES DE NEGÓCIOS","PROSPECÇÃO DE NEGÓCIOS",
   "PROSPECCOES DE NEGOCIOS","PROSPECCAO DE NEGOCIOS",
   "Prospecções de Negócios","Prospecção de Negócios",
@@ -1660,32 +1661,57 @@ async function fetchNNSheet(){
 }
 
 // ── ABA DE PROSPECÇÃO ──
-// gid confirmado pelo usuário como a aba real "PROSPECÇÃO DE NEGÓCIOS":
-// https://docs.google.com/spreadsheets/d/…/edit?gid=1049285644
-// IMPORTANTE: buscar por NOME (sheet=PROSPECÇÃO DE NEGÓCIOS) se mostrou
-// não-confiável nesta planilha — o endpoint gviz do Google, ao não casar
-// exatamente um nome de aba com acentuação, pode devolver outra aba (ex.:
-// MEDIÇÕES) SEM sinalizar erro "not_found". Como o parser da Prospecção
-// detecta a coluna de status por heurística (procura valores tipo
-// CONCLUÍDO/EM ANDAMENTO em qualquer célula), ele acaba "engolindo" dados
-// de outra aba sem perceber a troca. Buscar por gid é imune a isso, pois
-// aponta direto para o ID da aba, não para o nome — por isso agora é o
-// método PRIMÁRIO e único (com fila de concorrência + retry já existentes).
-// O fallback por nome só é usado se o gid genuinamente falhar (aba
-// removida/recriada), e mesmo assim com um cuidado extra: exige que a
-// resposta contenha um cabeçalho "STATUS" e "PROJETOS" reconhecíveis,
-// para reduzir a chance de aceitar silenciosamente a aba errada.
+// O nome da aba foi ajustado na planilha para "PROSPECCAO NEG." (sem
+// acentos) — isso resolve o problema anterior: nomes com acentuação
+// (Ç, Ã, Ó) às vezes não casam exatamente no parâmetro sheet= do endpoint
+// gviz do Google, que então devolve outra aba da planilha (ex.: MEDIÇÕES)
+// SEM sinalizar erro "not_found". Sem acentos, a chance de mismatch cai
+// bastante. Ainda assim, mantemos duas redes de segurança:
+//   1) Se a busca por nome vier vazia/malformada, tentamos pelo gid
+//      (1049285644, confirmado pelo usuário como a aba real).
+//   2) Antes de aceitar qualquer resultado como válido, exigimos que ao
+//      menos uma célula do conteúdo seja literalmente "STATUS" — isso é
+//      o que evita repetir o bug de aceitar silenciosamente dados de
+//      outra aba (que não teria essa célula exata).
+const PN_TAB_NAME = "PROSPECCAO NEG.";
 const PN_GID = "1049285644";
 
-async function fetchPNSheet(){
-  const q = "select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z";
-  const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(PN_GID)}&tq=${encodeURIComponent(q)}`;
+function _hasStatusHeader(parsed){
+  const rows = parsed?.table?.rows || [];
+  return rows.some(r=>
+    (r.c||[]).some(c=>{
+      const v = (c?.f ?? c?.v ?? "").toString().trim().toUpperCase();
+      return v === "STATUS";
+    })
+  );
+}
 
-  const attempt = ()=> _gvizSchedule(()=> _gvizFetchOnce(url, `PN gid=${PN_GID}`, 20000));
+async function fetchPNSheet(){
+  // 1) Tenta pelo nome exato da aba (método primário agora que não tem acentos)
+  try {
+    const url = _gvizUrlForTab(PN_TAB_NAME);
+    const text = await _gvizSchedule(()=> _gvizFetchOnce(url, PN_TAB_NAME, 20000));
+    if(!(text.includes('"status":"error"') && text.includes('not_found'))){
+      const parsed = _parseGviz(text);
+      if(parsed && parsed.table && Array.isArray(parsed.table.rows) && _hasStatusHeader(parsed)){
+        console.log(`[PN] sucesso usando aba "${PN_TAB_NAME}" (${parsed.table.rows.length} linhas)`);
+        return parsed;
+      }
+      console.warn(`[PN] aba "${PN_TAB_NAME}" respondeu mas sem cabeçalho "STATUS" reconhecível; tentando por gid.`);
+    } else {
+      console.warn(`[PN] aba "${PN_TAB_NAME}" não encontrada (not_found); tentando por gid.`);
+    }
+  } catch(e){
+    console.warn(`[PN] falha ao buscar por nome "${PN_TAB_NAME}":`, e.message, "— tentando por gid.");
+  }
+
+  // 2) Fallback pelo gid confirmado
+  const q = "select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z";
+  const gidUrl = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(PN_GID)}&tq=${encodeURIComponent(q)}`;
   let lastErr;
   for(let i=0;i<2;i++){
     try {
-      const text = await attempt();
+      const text = await _gvizSchedule(()=> _gvizFetchOnce(gidUrl, `PN gid=${PN_GID}`, 20000));
       const parsed = _parseGviz(text);
       if(parsed && parsed.table && Array.isArray(parsed.table.rows)){
         console.log(`[PN] sucesso usando gid=${PN_GID} (${parsed.table.rows.length} linhas)`);
@@ -1697,23 +1723,7 @@ async function fetchPNSheet(){
     }
     if(i===0) await new Promise(r=>setTimeout(r, 600));
   }
-  console.warn(`[PN] gid=${PN_GID} falhou (${lastErr?.message}); tentando por nome como último recurso.`);
-
-  // Fallback por nome, com verificação extra de que o cabeçalho bate com o
-  // layout esperado (STATUS + PROJETOS), para não aceitar silenciosamente
-  // dados de outra aba.
-  const parsed = await _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS");
-  const rows = parsed?.table?.rows || [];
-  const hasStatusHeader = rows.some(r=>
-    (r.c||[]).some(c=>{
-      const v = (c?.f ?? c?.v ?? "").toString().trim().toUpperCase();
-      return v === "STATUS";
-    })
-  );
-  if(!hasStatusHeader){
-    throw new Error(`Fallback por nome não encontrou cabeçalho "STATUS" — provavelmente aba errada; abortando para não exibir dados incorretos.`);
-  }
-  return parsed;
+  throw new Error(`PROSPECÇÃO: nenhuma estratégia funcionou (nome "${PN_TAB_NAME}" e gid ${PN_GID}). Última falha: ${lastErr?.message || lastErr}`);
 }
 
 const CACHE_KEY = "conviver_sheets_cache_v19";
