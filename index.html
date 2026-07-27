@@ -15,6 +15,8 @@
   --black:#0d0d0d;--dark:#181818;
   --green:#2eb86e;--green-dim:rgba(46,184,110,.13);
   --yellow:#b8900a;--yellow-dim:rgba(184,144,10,.13);
+  --pink:#d9548f;--pink-dim:rgba(217,84,143,.13);
+  --blue:#3a86c8;--blue-dim:rgba(58,134,200,.13);
   --red:#d94f4f;--gray-50:#f8f8f8;--gray-100:#efefef;
   --gray-200:#dedede;--gray-400:#aaa;--gray-600:#777;--text:#1a1a1a;
   --shadow:0 2px 12px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.07);
@@ -242,6 +244,7 @@ body{padding-top:58px}
 .es-active{background:rgba(255,255,255,.22)!important;box-shadow:0 0 0 2px rgba(255,255,255,.3)!important}
 .filter-badge{display:inline-flex;align-items:center;background:var(--yellow);color:#fff;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-left:4px}
 .es.y{border-left-color:var(--yellow)}.es.r{border-left-color:var(--red)}.es.b{border-left-color:#555}
+.es.pk{border-left-color:var(--pink)}.es.bl{border-left-color:var(--blue)}
 .es-n{font-size:19px;font-weight:700;color:#fff;line-height:1}
 .es-l{font-size:9px;color:var(--gray-400);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
 
@@ -3360,11 +3363,11 @@ function buildEmpV2(key){
     <div class="emp-hdr reveal">
       <div class="emp-nm">${emp.name}</div>
       <div class="emp-stats">
-        <div class="es es-click" title="Mostrar todos" onclick="filterByStatusV2('${key}','ALL')">
-          <div class="es-n">${s.tot}</div><div class="es-l">Total Projetos</div>
-        </div>
-        <div class="es es-click" title="Quantidade de linhas de projeto na planilha" onclick="filterByStatusV2('${key}','ALL')">
+        <div class="es pk es-click" title="Quantidade de linhas de projeto na planilha" onclick="filterByStatusV2('${key}','ALL')">
           <div class="es-n">${rows.length}</div><div class="es-l">Disciplinas</div>
+        </div>
+        <div class="es bl es-click" title="Mostrar todos" onclick="filterByStatusV2('${key}','ALL')">
+          <div class="es-n">${s.tot}</div><div class="es-l">Total Projetos</div>
         </div>
         <div class="es es-click" title="Ver somente Concluidos" onclick="filterByStatusV2('${key}','CONCLUIDO')">
           <div class="es-n">${s.c}</div><div class="es-l">Concluidos</div>
