@@ -1660,16 +1660,60 @@ async function fetchNNSheet(){
 }
 
 // ── ABA DE PROSPECÇÃO ──
-// Havia uma busca "atalho" por gid (mais imune a variações de nome), mas o
-// gid ficou desatualizado: passou a apontar para OUTRA aba da planilha que
-// também retorna table.rows válido — por isso o site mostrava dados errados
-// em vez de dar erro (a validação de "resposta vazia" não pega esse caso,
-// já que a resposta não está vazia, só é da aba errada). A busca por nome é
-// imune a esse problema porque sempre confere contra o nome real da aba, e
-// já temos essa mesma estratégia funcionando para MEDIÇÕES e NN. Então
-// abandonamos o atalho por gid e usamos só o fallback por nome.
+// gid confirmado pelo usuário como a aba real "PROSPECÇÃO DE NEGÓCIOS":
+// https://docs.google.com/spreadsheets/d/…/edit?gid=1049285644
+// IMPORTANTE: buscar por NOME (sheet=PROSPECÇÃO DE NEGÓCIOS) se mostrou
+// não-confiável nesta planilha — o endpoint gviz do Google, ao não casar
+// exatamente um nome de aba com acentuação, pode devolver outra aba (ex.:
+// MEDIÇÕES) SEM sinalizar erro "not_found". Como o parser da Prospecção
+// detecta a coluna de status por heurística (procura valores tipo
+// CONCLUÍDO/EM ANDAMENTO em qualquer célula), ele acaba "engolindo" dados
+// de outra aba sem perceber a troca. Buscar por gid é imune a isso, pois
+// aponta direto para o ID da aba, não para o nome — por isso agora é o
+// método PRIMÁRIO e único (com fila de concorrência + retry já existentes).
+// O fallback por nome só é usado se o gid genuinamente falhar (aba
+// removida/recriada), e mesmo assim com um cuidado extra: exige que a
+// resposta contenha um cabeçalho "STATUS" e "PROJETOS" reconhecíveis,
+// para reduzir a chance de aceitar silenciosamente a aba errada.
+const PN_GID = "1049285644";
+
 async function fetchPNSheet(){
-  return _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS");
+  const q = "select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z";
+  const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(PN_GID)}&tq=${encodeURIComponent(q)}`;
+
+  const attempt = ()=> _gvizSchedule(()=> _gvizFetchOnce(url, `PN gid=${PN_GID}`, 20000));
+  let lastErr;
+  for(let i=0;i<2;i++){
+    try {
+      const text = await attempt();
+      const parsed = _parseGviz(text);
+      if(parsed && parsed.table && Array.isArray(parsed.table.rows)){
+        console.log(`[PN] sucesso usando gid=${PN_GID} (${parsed.table.rows.length} linhas)`);
+        return parsed;
+      }
+      lastErr = new Error(`gid=${PN_GID} respondeu sem "table.rows" válido`);
+    } catch(e){
+      lastErr = e;
+    }
+    if(i===0) await new Promise(r=>setTimeout(r, 600));
+  }
+  console.warn(`[PN] gid=${PN_GID} falhou (${lastErr?.message}); tentando por nome como último recurso.`);
+
+  // Fallback por nome, com verificação extra de que o cabeçalho bate com o
+  // layout esperado (STATUS + PROJETOS), para não aceitar silenciosamente
+  // dados de outra aba.
+  const parsed = await _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS");
+  const rows = parsed?.table?.rows || [];
+  const hasStatusHeader = rows.some(r=>
+    (r.c||[]).some(c=>{
+      const v = (c?.f ?? c?.v ?? "").toString().trim().toUpperCase();
+      return v === "STATUS";
+    })
+  );
+  if(!hasStatusHeader){
+    throw new Error(`Fallback por nome não encontrou cabeçalho "STATUS" — provavelmente aba errada; abortando para não exibir dados incorretos.`);
+  }
+  return parsed;
 }
 
 const CACHE_KEY = "conviver_sheets_cache_v19";
