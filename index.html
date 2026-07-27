@@ -3361,7 +3361,10 @@ function buildEmpV2(key){
       <div class="emp-nm">${emp.name}</div>
       <div class="emp-stats">
         <div class="es es-click" title="Mostrar todos" onclick="filterByStatusV2('${key}','ALL')">
-          <div class="es-n">${rows.length}</div><div class="es-l">Projetos</div>
+          <div class="es-n">${s.tot}</div><div class="es-l">Total Projetos</div>
+        </div>
+        <div class="es es-click" title="Quantidade de linhas de projeto na planilha" onclick="filterByStatusV2('${key}','ALL')">
+          <div class="es-n">${rows.length}</div><div class="es-l">Disciplinas</div>
         </div>
         <div class="es es-click" title="Ver somente Concluidos" onclick="filterByStatusV2('${key}','CONCLUIDO')">
           <div class="es-n">${s.c}</div><div class="es-l">Concluidos</div>
