@@ -1338,12 +1338,7 @@ async function _fetchTabWithFallbacks(variants, label){
   for(const name of variants){
     try {
       const url = _gvizUrlForTab(name);
-      const resp = await fetch(url, {cache:"no-store"});
-      if(!resp.ok){
-        lastErr = new Error(`HTTP ${resp.status} para "${name}"`);
-        continue;
-      }
-      const text = await resp.text();
+      const text = await _gvizSchedule(()=> _gvizFetchOnce(url, name, 20000));
       // gviz returns "google.visualization.Query.setResponse({...})"
       // If sheet not found, status will be "error" with reason "not_found"
       if(text.includes('"status":"error"') && text.includes('not_found')){
@@ -1351,6 +1346,12 @@ async function _fetchTabWithFallbacks(variants, label){
         continue;
       }
       const parsed = _parseGviz(text);
+      // Validação extra: uma resposta "de sucesso" mas sem table.rows/cols
+      // não é utilizável — trata como falha para cair no próximo nome/gid.
+      if(!parsed || !parsed.table){
+        lastErr = new Error(`Aba "${name}" retornou resposta sem "table"`);
+        continue;
+      }
       console.log(`[${label}] sucesso usando aba "${name}"`);
       return parsed;
     } catch(e){
@@ -1668,17 +1669,24 @@ function _gvizUrlForGid(gid){
 }
 
 // Busca a aba de Prospecção: primeiro por gid; se falhar, tenta os nomes.
+// IMPORTANTE: o gid pode ficar desatualizado (aba recriada/renomeada/movida
+// para outra planilha) e o gviz ainda assim responder HTTP 200 com um corpo
+// que não é "not_found" mas também não tem table.rows utilizável — por isso
+// validamos explicitamente `parsed.table` antes de aceitar como sucesso;
+// caso contrário caímos no fallback por nome, que é imune a esse problema.
 async function fetchPNSheet(){
   try {
-    const resp = await fetch(_gvizUrlForGid(PN_GID), {cache:"no-store"});
-    if(resp.ok){
-      const text = await resp.text();
-      if(!(text.includes('"status":"error"') && text.includes('not_found'))){
+    const text = await _gvizSchedule(()=> _gvizFetchOnce(_gvizUrlForGid(PN_GID), `PN gid=${PN_GID}`, 20000));
+    if(!(text.includes('"status":"error"') && text.includes('not_found'))){
+      const parsed = _parseGviz(text);
+      if(parsed && parsed.table && Array.isArray(parsed.table.rows)){
         console.log(`[PN] sucesso usando gid=${PN_GID}`);
-        return _parseGviz(text);
+        return parsed;
       }
+      console.warn(`[PN] gid=${PN_GID} respondeu mas sem "table.rows" válido; tentando por nome.`);
+    } else {
+      console.warn(`[PN] gid=${PN_GID} não encontrado (not_found); tentando por nome.`);
     }
-    console.warn(`[PN] gid=${PN_GID} não retornou dados; tentando por nome.`);
   } catch(e){
     console.warn("[PN] falha ao buscar por gid:", e.message);
   }
@@ -1875,21 +1883,61 @@ function parsePRSheet(gviz){
   return out;
 }
 
-async function fetchSheet(tabName){
-  const url = _gvizUrl(tabName);
-  // Timeout de 15s: evita spinner infinito em conexões móveis instáveis.
+// ── FILA DE CONCORRÊNCIA PARA O ENDPOINT GVIZ ──
+// O endpoint não-documentado gviz/tq do Google enfileira/limita chamadas
+// simultâneas para a MESMA planilha. Como carregamos ~18 abas em paralelo
+// (15 empreendimentos + GE + DVT + MEDIÇÕES + NN), disparar tudo de uma vez
+// faz boa parte delas ficarem penduradas além do timeout — não é erro de
+// permissão, é o próprio Google segurando o excedente. Esta fila garante que
+// no máximo GVIZ_MAX_CONCURRENT requisições estejam em voo ao mesmo tempo;
+// o restante espera sua vez, reduzindo timeouts drasticamente.
+const GVIZ_MAX_CONCURRENT = 4;
+let _gvizActive = 0;
+const _gvizQueue = [];
+function _gvizRunNext(){
+  while(_gvizActive < GVIZ_MAX_CONCURRENT && _gvizQueue.length){
+    const task = _gvizQueue.shift();
+    _gvizActive++;
+    task().finally(()=>{ _gvizActive--; _gvizRunNext(); });
+  }
+}
+function _gvizSchedule(taskFn){
+  return new Promise((resolve, reject)=>{
+    _gvizQueue.push(()=> taskFn().then(resolve, reject));
+    _gvizRunNext();
+  });
+}
+
+// Executa um único fetch gviz com timeout. Não lida com fila/retry —
+// isso é responsabilidade de quem chama (fetchSheet abaixo).
+async function _gvizFetchOnce(url, label, timeoutMs){
   const ctrl = new AbortController();
-  const timer = setTimeout(()=>ctrl.abort(), 15000);
+  const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
   try {
     const resp = await fetch(url, {cache:"no-store", signal: ctrl.signal});
-    if(!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar aba "${tabName}"`);
-    const text = await resp.text();
-    return _parseGviz(text);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar aba "${label}"`);
+    return await resp.text();
   } catch(e){
-    if(e.name === 'AbortError') throw new Error(`Timeout (15s) ao buscar aba "${tabName}"`);
+    if(e.name === 'AbortError') throw new Error(`Timeout (${Math.round(timeoutMs/1000)}s) ao buscar aba "${label}"`);
     throw e;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function fetchSheet(tabName){
+  // Timeout de 20s por tentativa (com folga para filas do Google) + 1 retry
+  // automático com pequeno atraso, já que timeouts aqui costumam ser
+  // throttling passageiro, não ausência real dos dados.
+  const attempt = ()=> _gvizSchedule(()=> _gvizFetchOnce(_gvizUrl(tabName), tabName, 20000));
+  try {
+    const text = await attempt();
+    return _parseGviz(text);
+  } catch(e){
+    console.warn(`[${tabName}] primeira tentativa falhou (${e.message}); tentando novamente…`);
+    await new Promise(r=>setTimeout(r, 600));
+    const text = await attempt();
+    return _parseGviz(text);
   }
 }
 
