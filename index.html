@@ -1333,13 +1333,37 @@ function _gvizUrlForTab(tabName){
   return `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(tabName)}&tq=${encodeURIComponent(q)}`;
 }
 
+// Mesma aba, mas SEM especificar colunas — o Google então devolve exatamente
+// as colunas que a aba realmente tem, sejam quantas forem.
+function _gvizUrlForTabRaw(tabName){
+  return `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(tabName)}`;
+}
+
+// Busca uma aba pelo nome com a estratégia "A:Z" (ignora filtros visuais
+// ativos). PORÉM: se a aba tiver menos de 26 colunas reais, o Google rejeita
+// a consulta com um erro de "consulta inválida" — que NÃO é o mesmo erro de
+// "aba não encontrada" (not_found), mas antes o código tratava os dois como
+// se fossem o mesmo tipo de falha. Isso fazia abas mais estreitas (como
+// "PROSPECCAO NEG.", que só tem até a coluna V) parecerem sem dados quando
+// na verdade só estavam sendo mal interpretadas. Agora, detectamos esse caso específico e repetimos a busca sem selecionar
+// colunas, o que sempre funciona independentemente da largura da aba.
+async function _gvizFetchTabSmart(tabName, label, timeoutMs){
+  const url = _gvizUrlForTab(tabName);
+  let text = await _gvizSchedule(()=> _gvizFetchOnce(url, label, timeoutMs));
+  if(text.includes('"status":"error"') && !text.includes('not_found')){
+    console.warn(`[gviz] "${label}": consulta com colunas A:Z falhou (provável aba com menos de 26 colunas); tentando sem seleção de colunas.`);
+    const rawUrl = _gvizUrlForTabRaw(tabName);
+    text = await _gvizSchedule(()=> _gvizFetchOnce(rawUrl, label, timeoutMs));
+  }
+  return text;
+}
+
 // Try a series of tab name variants until one returns a valid gviz response
 async function _fetchTabWithFallbacks(variants, label){
   let lastErr;
   for(const name of variants){
     try {
-      const url = _gvizUrlForTab(name);
-      const text = await _gvizSchedule(()=> _gvizFetchOnce(url, name, 20000));
+      const text = await _gvizFetchTabSmart(name, name, 20000);
       // gviz returns "google.visualization.Query.setResponse({...})"
       // If sheet not found, status will be "error" with reason "not_found"
       if(text.includes('"status":"error"') && text.includes('not_found')){
@@ -1687,10 +1711,11 @@ function _hasStatusHeader(parsed){
 }
 
 async function fetchPNSheet(){
-  // 1) Tenta pelo nome exato da aba (método primário agora que não tem acentos)
+  // 1) Tenta pelo nome exato da aba (método primário agora que não tem acentos).
+  // _gvizFetchTabSmart já lida com o caso da aba ter menos de 26 colunas
+  // (era exatamente o que estava quebrando aqui antes).
   try {
-    const url = _gvizUrlForTab(PN_TAB_NAME);
-    const text = await _gvizSchedule(()=> _gvizFetchOnce(url, PN_TAB_NAME, 20000));
+    const text = await _gvizFetchTabSmart(PN_TAB_NAME, PN_TAB_NAME, 20000);
     if(!(text.includes('"status":"error"') && text.includes('not_found'))){
       const parsed = _parseGviz(text);
       if(parsed && parsed.table && Array.isArray(parsed.table.rows) && _hasStatusHeader(parsed)){
@@ -1705,13 +1730,16 @@ async function fetchPNSheet(){
     console.warn(`[PN] falha ao buscar por nome "${PN_TAB_NAME}":`, e.message, "— tentando por gid.");
   }
 
-  // 2) Fallback pelo gid confirmado
-  const q = "select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z";
-  const gidUrl = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(PN_GID)}&tq=${encodeURIComponent(q)}`;
+  // 2) Fallback pelo gid confirmado (mesma proteção contra colunas demais)
   let lastErr;
   for(let i=0;i<2;i++){
     try {
-      const text = await _gvizSchedule(()=> _gvizFetchOnce(gidUrl, `PN gid=${PN_GID}`, 20000));
+      const gidUrl = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(PN_GID)}&tq=${encodeURIComponent("select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z")}`;
+      let text = await _gvizSchedule(()=> _gvizFetchOnce(gidUrl, `PN gid=${PN_GID}`, 20000));
+      if(text.includes('"status":"error"') && !text.includes('not_found')){
+        const rawGidUrl = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(PN_GID)}`;
+        text = await _gvizSchedule(()=> _gvizFetchOnce(rawGidUrl, `PN gid=${PN_GID} (raw)`, 20000));
+      }
       const parsed = _parseGviz(text);
       if(parsed && parsed.table && Array.isArray(parsed.table.rows)){
         console.log(`[PN] sucesso usando gid=${PN_GID} (${parsed.table.rows.length} linhas)`);
@@ -1961,8 +1989,9 @@ async function _gvizFetchOnce(url, label, timeoutMs){
 async function fetchSheet(tabName){
   // Timeout de 20s por tentativa (com folga para filas do Google) + 1 retry
   // automático com pequeno atraso, já que timeouts aqui costumam ser
-  // throttling passageiro, não ausência real dos dados.
-  const attempt = ()=> _gvizSchedule(()=> _gvizFetchOnce(_gvizUrl(tabName), tabName, 20000));
+  // throttling passageiro, não ausência real dos dados. _gvizFetchTabSmart
+  // também lida com abas que têm menos de 26 colunas (ver comentário acima).
+  const attempt = ()=> _gvizFetchTabSmart(tabName, tabName, 20000);
   try {
     const text = await attempt();
     return _parseGviz(text);
