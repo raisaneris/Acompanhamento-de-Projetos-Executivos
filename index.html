@@ -2697,22 +2697,26 @@ function buildDash(){
         map.get(forn)[bucket]++;
       });
     });
+    // Ordem: mais projetos Em Andamento primeiro; empate → mais Não Iniciados;
+    // empate → mais Concluídos; empate final → ordem alfabética.
     const list = [...map.entries()].map(([forn,v])=>({forn,...v,tot:v.c+v.a+v.n}))
-      .sort((x,y)=> y.tot-x.tot || x.forn.localeCompare(y.forn));
+      .sort((x,y)=> y.a-x.a || y.n-x.n || y.c-x.c || x.forn.localeCompare(y.forn));
     const el = document.getElementById('fornStatusTable');
     if(!el) return;
     if(list.length===0){
       el.innerHTML = '<div style="padding:16px;color:#999;font-size:12px">Nenhum fornecedor encontrado.</div>';
       return;
     }
-    let h = `<div class="tw"><table><thead><tr>
+    // Altura fixa ≈ 5 linhas visíveis (cabeçalho + 5 linhas), restante rola.
+    let h = `<div class="tw" style="max-height:242px;overflow-y:auto"><table><thead style="position:sticky;top:0;z-index:2"><tr>
       <th>Fornecedor</th><th class="sc">Concluídos</th><th class="sc">Em Andamento</th><th class="sc">Não Iniciados</th><th class="sc">Total</th>
     </tr></thead><tbody>`;
     list.forEach(it=>{
+      const fk = it.forn.replace(/'/g,"\\'");
       h += `<tr><td style="font-weight:600;color:#111">${it.forn}</td>
-        <td class="sc"><span class="bx bx-ok">${it.c}</span></td>
-        <td class="sc"><span class="bx" style="background:rgba(184,144,10,.12);color:#8a6a00;border:1px solid rgba(184,144,10,.3)">${it.a}</span></td>
-        <td class="sc"><span class="bx" style="background:rgba(217,79,79,.12);color:#a8312f;border:1px solid rgba(217,79,79,.3)">${it.n}</span></td>
+        <td class="sc"><button class="bx bx-ok" style="cursor:pointer;border:none" onclick="openFornStatusModal('${fk}','c')" title="Ver projetos concluídos de ${it.forn}">${it.c}</button></td>
+        <td class="sc"><button class="bx" style="cursor:pointer;background:rgba(184,144,10,.12);color:#8a6a00;border:1px solid rgba(184,144,10,.3)" onclick="openFornStatusModal('${fk}','a')" title="Ver projetos em andamento de ${it.forn}">${it.a}</button></td>
+        <td class="sc"><button class="bx" style="cursor:pointer;background:rgba(217,79,79,.12);color:#a8312f;border:1px solid rgba(217,79,79,.3)" onclick="openFornStatusModal('${fk}','n')" title="Ver projetos não iniciados de ${it.forn}">${it.n}</button></td>
         <td class="sc" style="font-weight:700">${it.tot}</td></tr>`;
     });
     h += '</tbody></table></div>';
@@ -4195,6 +4199,64 @@ function closeEmpModal(){
   document.getElementById('empModal').classList.remove('show');
   document.body.style.overflow='';
 }
+
+// ── Modal: projetos de um fornecedor em uma fase específica (aberto pelos
+// botões da tabela "Fornecedores — Projetos por Status" no Dashboard) ──
+function openFornStatusModal(fornecedor, bucket){
+  const bucketInfo = {
+    c:{label:'Concluídos', color:'var(--green)'},
+    a:{label:'Em Andamento', color:'var(--yellow)'},
+    n:{label:'Não Iniciados', color:'var(--red)'}
+  }[bucket] || {label:'', color:'#888'};
+
+  const items = [];
+  EK.forEach(k=>{
+    (D[k].rows||[]).forEach(r=>{
+      if((r.fornecedor||'').trim() !== fornecedor) return;
+      const vals = ST.map(s=>r[s]).filter(isV);
+      if(vals.length===0) return;
+      let rb;
+      if(vals.some(v=>v===A)) rb='a';
+      else if(vals.every(v=>v===C)) rb='c';
+      else rb='n';
+      if(rb!==bucket) return;
+      items.push({emp:D[k].name, projeto:r.projeto||'—', pasta:r.pasta||'—', setor:r.setor||'—', prazo:r.prazo||'—'});
+    });
+  });
+  items.sort((x,y)=> x.emp.localeCompare(y.emp) || x.projeto.localeCompare(y.projeto));
+
+  const tableRows = items.map(it=>`<tr>
+    <td style="font-weight:600;color:#111">${it.emp}</td>
+    <td>${it.projeto}</td>
+    <td>${it.pasta}</td>
+    <td>${it.setor}</td>
+    <td>${it.prazo}</td>
+  </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:#999;padding:22px">Nenhum projeto encontrado.</td></tr>`;
+
+  const inner = document.getElementById('empModalInner');
+  inner.innerHTML = `
+    <div class="emp-modal-right" style="width:100%">
+      <div class="emp-modal-hdr">
+        <div>
+          <div class="emp-modal-hdr-title">${fornecedor}</div>
+          <div style="font-size:15px;font-weight:700;color:${bucketInfo.color};margin-top:2px">${bucketInfo.label} — ${items.length} projeto${items.length===1?'':'s'}</div>
+        </div>
+        <button class="emp-modal-close" onclick="closeEmpModal()" title="Fechar">&times;</button>
+      </div>
+      <div class="emp-modal-body">
+        <table>
+          <thead><tr>
+            <th>Empreendimento</th><th>Projeto</th><th>Pasta</th><th>Setor</th><th>Prazo</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.getElementById('empModal').classList.add('show');
+  document.body.style.overflow='hidden';
+}
+
 
 // Map full empreendimento name → logo (fallback to conviver)
 function getEmpLogoByName(name){
