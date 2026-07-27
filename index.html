@@ -1659,37 +1659,16 @@ async function fetchNNSheet(){
   return _fetchTabWithFallbacks(NN_TAB_VARIANTS, "ACOMPANHAMENTO NN");
 }
 
-// gid da aba PROSPECÇÃO DE NEGÓCIOS. Buscar por gid é imune a variações de
-// nome (singular/plural, acentuação, espaços), ao contrário do parâmetro sheet=.
-const PN_GID = "1049285644";
-
-function _gvizUrlForGid(gid){
-  const q = "select A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z";
-  return `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:json&headers=0&gid=${encodeURIComponent(gid)}&tq=${encodeURIComponent(q)}`;
-}
-
-// Busca a aba de Prospecção: primeiro por gid; se falhar, tenta os nomes.
-// IMPORTANTE: o gid pode ficar desatualizado (aba recriada/renomeada/movida
-// para outra planilha) e o gviz ainda assim responder HTTP 200 com um corpo
-// que não é "not_found" mas também não tem table.rows utilizável — por isso
-// validamos explicitamente `parsed.table` antes de aceitar como sucesso;
-// caso contrário caímos no fallback por nome, que é imune a esse problema.
+// ── ABA DE PROSPECÇÃO ──
+// Havia uma busca "atalho" por gid (mais imune a variações de nome), mas o
+// gid ficou desatualizado: passou a apontar para OUTRA aba da planilha que
+// também retorna table.rows válido — por isso o site mostrava dados errados
+// em vez de dar erro (a validação de "resposta vazia" não pega esse caso,
+// já que a resposta não está vazia, só é da aba errada). A busca por nome é
+// imune a esse problema porque sempre confere contra o nome real da aba, e
+// já temos essa mesma estratégia funcionando para MEDIÇÕES e NN. Então
+// abandonamos o atalho por gid e usamos só o fallback por nome.
 async function fetchPNSheet(){
-  try {
-    const text = await _gvizSchedule(()=> _gvizFetchOnce(_gvizUrlForGid(PN_GID), `PN gid=${PN_GID}`, 20000));
-    if(!(text.includes('"status":"error"') && text.includes('not_found'))){
-      const parsed = _parseGviz(text);
-      if(parsed && parsed.table && Array.isArray(parsed.table.rows)){
-        console.log(`[PN] sucesso usando gid=${PN_GID}`);
-        return parsed;
-      }
-      console.warn(`[PN] gid=${PN_GID} respondeu mas sem "table.rows" válido; tentando por nome.`);
-    } else {
-      console.warn(`[PN] gid=${PN_GID} não encontrado (not_found); tentando por nome.`);
-    }
-  } catch(e){
-    console.warn("[PN] falha ao buscar por gid:", e.message);
-  }
   return _fetchTabWithFallbacks(PN_TAB_VARIANTS, "PROSPECÇÃO DE NEGÓCIOS");
 }
 
