@@ -1190,6 +1190,13 @@ setTimeout(()=>{ const u=document.getElementById('login-user'); if(u && !u.disab
     </div>
   </div>
 
+  <div class="sec" style="margin-top:24px">Fornecedores — Projetos por Status</div>
+  <div class="chart-card reveal" style="margin-bottom:28px">
+    <div class="chart-head">Projetos por Fornecedor</div>
+    <div class="chart-sub">Quantidade de projetos Concluídos, Em Andamento e Não Iniciados por fornecedor (todos os empreendimentos)</div>
+    <div id="fornStatusTable"></div>
+  </div>
+
   <div class="sec" style="margin-top:24px">Novos Negócios — Atuação por Estado</div>
   <div id="nn-section" style="margin-bottom:22px"></div>
 
@@ -2668,6 +2675,50 @@ function buildDash(){
   });
   const dvtExp=D.DVT.filter(d=>isExp(lastVal(d))).length;
 
+  // ── Fornecedores — projetos por status (todos os empreendimentos) ──
+  // Reutiliza a mesma regra de classificação por linha usada em countRowStatus:
+  // uma linha conta como Em Andamento se qualquer etapa aplicável (EP/AP/PL/PE)
+  // estiver em andamento; senão Concluído se TODAS as etapas aplicáveis
+  // estiverem concluídas; caso contrário, Não Iniciado. Linhas sem nenhuma
+  // etapa aplicável ou sem fornecedor preenchido são ignoradas.
+  (function buildFornStatusTable(){
+    const map = new Map(); // fornecedor -> {c,a,n}
+    EK.forEach(k=>{
+      (D[k].rows||[]).forEach(r=>{
+        const forn = (r.fornecedor||'').trim();
+        if(!forn) return;
+        const vals = ST.map(s=>r[s]).filter(isV);
+        if(vals.length===0) return;
+        let bucket;
+        if(vals.some(v=>v===A)) bucket='a';
+        else if(vals.every(v=>v===C)) bucket='c';
+        else bucket='n';
+        if(!map.has(forn)) map.set(forn,{c:0,a:0,n:0});
+        map.get(forn)[bucket]++;
+      });
+    });
+    const list = [...map.entries()].map(([forn,v])=>({forn,...v,tot:v.c+v.a+v.n}))
+      .sort((x,y)=> y.tot-x.tot || x.forn.localeCompare(y.forn));
+    const el = document.getElementById('fornStatusTable');
+    if(!el) return;
+    if(list.length===0){
+      el.innerHTML = '<div style="padding:16px;color:#999;font-size:12px">Nenhum fornecedor encontrado.</div>';
+      return;
+    }
+    let h = `<div class="tw"><table><thead><tr>
+      <th>Fornecedor</th><th class="sc">Concluídos</th><th class="sc">Em Andamento</th><th class="sc">Não Iniciados</th><th class="sc">Total</th>
+    </tr></thead><tbody>`;
+    list.forEach(it=>{
+      h += `<tr><td style="font-weight:600;color:#111">${it.forn}</td>
+        <td class="sc"><span class="bx bx-ok">${it.c}</span></td>
+        <td class="sc"><span class="bx" style="background:rgba(184,144,10,.12);color:#8a6a00;border:1px solid rgba(184,144,10,.3)">${it.a}</span></td>
+        <td class="sc"><span class="bx" style="background:rgba(217,79,79,.12);color:#a8312f;border:1px solid rgba(217,79,79,.3)">${it.n}</span></td>
+        <td class="sc" style="font-weight:700">${it.tot}</td></tr>`;
+    });
+    h += '</tbody></table></div>';
+    el.innerHTML = h;
+  })();
+
   // Compute extra metrics: total terrenos NN + total saldo em aberto
   const totalTerrenosNN = (typeof NN_DATA!=='undefined') ? NN_DATA.length : 0;
   const totalSaldoAberto = (typeof CONTRATOS!=='undefined')
@@ -2937,7 +2988,7 @@ function buildPN(key){
     <div class="emp-hdr reveal">
       <div class="emp-nm">${emp.name}</div>
       <div class="emp-stats">
-        <div class="es es-click" title="Mostrar todos" onclick="filterByStatusPN('${key}','ALL')">
+        <div class="es pk es-click" title="Mostrar todos" onclick="filterByStatusPN('${key}','ALL')">
           <div class="es-n">${rows.length}</div><div class="es-l">Projetos</div>
         </div>
         <div class="es es-click" title="Ver somente Concluidos" onclick="filterByStatusPN('${key}','${C}')">
@@ -3989,7 +4040,7 @@ function buildContracts(){
     <div class="emp-hdr reveal" style="border-color:var(--green)">
       <div class="emp-nm">Contratos &amp; Medições</div>
       <div class="emp-stats">
-        <div class="es"><div class="es-n">${CONTRATOS.length}</div><div class="es-l">Registros</div></div>
+        <div class="es pk"><div class="es-n">${CONTRATOS.length}</div><div class="es-l">Registros</div></div>
         <div class="es"><div class="es-n">${new Set(CONTRATOS.map(r=>r.cod)).size}</div><div class="es-l">Contratos</div></div>
         <div class="es y"><div class="es-n">${CONTRATOS.filter(r=>r.pct<1&&r.pct>0).length}</div><div class="es-l">Em Aberto</div></div>
         <div class="es r"><div class="es-n">${CONTRATOS.filter(r=>r.saldo<0).length}</div><div class="es-l">Saldo Neg.</div></div>
@@ -4721,8 +4772,8 @@ function buildNNPage(){
   let h = `<div class="emp-hdr reveal" style="border-color:#3498db">
     <div class="emp-nm">Acompanhamento Novos Negócios — NN</div>
     <div class="emp-stats">
-      <div class="es" style="border-left-color:#3498db"><div class="es-n">${total}</div><div class="es-l">Terrenos</div></div>
-      <div class="es" style="border-left-color:var(--green)"><div class="es-n">${visitados}</div><div class="es-l">Visitados</div></div>
+      <div class="es" style="border-left-color:var(--pink)"><div class="es-n">${total}</div><div class="es-l">Terrenos</div></div>
+      <div class="es" style="border-left-color:var(--blue)"><div class="es-n">${visitados}</div><div class="es-l">Visitados</div></div>
       <div class="es" style="border-left-color:var(--green)"><div class="es-n">${comRel}</div><div class="es-l">Relatórios</div></div>
       <div class="es y"><div class="es-n">${semRel}</div><div class="es-l">Em Elaboração</div></div>
       <div class="es r"><div class="es-n">${semVisita}</div><div class="es-l">Sem Visita</div></div>
