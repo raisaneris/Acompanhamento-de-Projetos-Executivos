@@ -4817,12 +4817,11 @@ function buildNNPage(){
   const total = NN_DATA.length;
   const visitados = NN_DATA.filter(d=>d.visita==='SIM').length;
   const comRel = NN_DATA.filter(d=>d.v1).length;
-  // "Em Elaboração" agora lê diretamente a coluna STATUS da planilha (igual
-  // ao badge exibido na tabela), em vez da heurística antiga baseada em
-  // visita+relatório, que podia divergir do valor real da planilha.
+  // O card "Em Elaboração" conta as linhas cuja coluna STATUS da planilha
+  // está como "EM ANDAMENTO" (lê o valor real da planilha, não uma heurística).
   const semRel = NN_DATA.filter(d=>{
     const s=(d.status||'').trim().toUpperCase();
-    return s==='EM ELABORAÇÃO' || s==='EM ELABORACAO';
+    return s==='EM ANDAMENTO';
   }).length;
   const semVisita = NN_DATA.filter(d=>d.visita==='NÃO').length;
   // "PAUSADO" na coluna STATUS da planilha é contado no resumo como "Descartado".
