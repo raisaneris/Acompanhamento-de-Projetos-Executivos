@@ -1290,7 +1290,6 @@ const EMPREENDIMENTOS = [
   { code:'TII', name:'TIANGUÁ II',        sheetTab:'TIAII' },
   { code:'BII', name:'BARREIRINHAS II',   sheetTab:'BARII' },
   { code:'SPT', name:'SÍTIO PASSATEMPO',  sheetTab:'THZMC' },
-  { code:'TAG', name:'TIANGUÁ AG',        sheetTab:'TIAAG' },
   { code:'RPA', name:'RAPOSA ARMANDO',    sheetTab:'RPARM' },
   { code:'SLI', name:'SÃO LUÍS ILHA RACE',sheetTab:'SLIRC' },
   { code:'CRL', name:'CARIRI LIFE',       sheetTab:'CARLF' },
@@ -3561,11 +3560,15 @@ function buildDVT(){
     </tr></thead><tbody>`;
   D.DVT.forEach(d=>{
     const lv=lastVal(d),exp=isExp(lv);
+    const semData = !d.emissao && !d.r00 && !d.r01 && !d.r02 && !d.r03;
+    const statusHtml = semData
+      ? `<span class="bx" style="background:rgba(150,150,150,.12);color:#666;border:1px solid rgba(150,150,150,.3)">NÃO FOI EMITIDA</span>`
+      : `<span class="bx ${exp?'bx-exp':'bx-ok'}">${exp?'EXPIRADO':'VÁLIDO'}</span>`;
     h+=`<tr><td><strong>${d.emp}</strong></td><td>${d.conc}</td><td>${d.disc}</td>
       <td class="tm">${d.emissao}</td><td class="tm">${d.r00||'—'}</td>
       <td class="tm">${d.r01||'—'}</td><td class="tm">${d.r02||'—'}</td><td class="tm">${d.r03||'—'}</td>
       <td class="tm"><strong>${lv}</strong></td>
-      <td><span class="bx ${exp?'bx-exp':'bx-ok'}">${exp?'EXPIRADO':'VÁLIDO'}</span></td>
+      <td>${statusHtml}</td>
       <td class="to">${d.obs}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
@@ -4220,7 +4223,7 @@ function openFornStatusModal(fornecedor, bucket){
       else if(vals.every(v=>v===C)) rb='c';
       else rb='n';
       if(rb!==bucket) return;
-      items.push({emp:D[k].name, projeto:r.projeto||'—', pasta:r.pasta||'—', setor:r.setor||'—', prazo:r.prazo||'—'});
+      items.push({emp:D[k].name, projeto:r.projeto||'—', obs:r.obs||'—', setor:r.setor||'—', prazo:r.prazo||'—'});
     });
   });
   items.sort((x,y)=> x.emp.localeCompare(y.emp) || x.projeto.localeCompare(y.projeto));
@@ -4228,7 +4231,7 @@ function openFornStatusModal(fornecedor, bucket){
   const tableRows = items.map(it=>`<tr>
     <td style="font-weight:600;color:#111">${it.emp}</td>
     <td>${it.projeto}</td>
-    <td>${it.pasta}</td>
+    <td>${it.obs}</td>
     <td>${it.setor}</td>
     <td>${it.prazo}</td>
   </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:#999;padding:22px">Nenhum projeto encontrado.</td></tr>`;
@@ -4246,7 +4249,7 @@ function openFornStatusModal(fornecedor, bucket){
       <div class="emp-modal-body">
         <table>
           <thead><tr>
-            <th>Empreendimento</th><th>Projeto</th><th>Pasta</th><th>Setor</th><th>Prazo</th>
+            <th>Empreendimento</th><th>Projeto</th><th>Observações</th><th>Setor</th><th>Prazo</th>
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
@@ -4816,6 +4819,8 @@ function buildNNPage(){
   const comRel = NN_DATA.filter(d=>d.v1).length;
   const semRel = NN_DATA.filter(d=>!d.v1 && d.visita==='SIM').length;
   const semVisita = NN_DATA.filter(d=>d.visita==='NÃO').length;
+  // "PAUSADO" na coluna STATUS da planilha é contado no resumo como "Descartado".
+  const descartado = NN_DATA.filter(d=>(d.status||'').trim().toUpperCase()==='PAUSADO').length;
 
   function statusBadge(r){
     // Lê o Status direto da planilha (coluna I). Mapeia para o badge visual
@@ -4839,6 +4844,7 @@ function buildNNPage(){
       <div class="es" style="border-left-color:var(--green)"><div class="es-n">${comRel}</div><div class="es-l">Relatórios</div></div>
       <div class="es y"><div class="es-n">${semRel}</div><div class="es-l">Em Elaboração</div></div>
       <div class="es r"><div class="es-n">${semVisita}</div><div class="es-l">Sem Visita</div></div>
+      <div class="es b"><div class="es-n">${descartado}</div><div class="es-l">Descartado</div></div>
     </div>
   </div>
   <div style="margin-top:18px"></div>
