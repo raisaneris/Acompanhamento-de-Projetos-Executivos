@@ -4230,9 +4230,9 @@ function openFornStatusModal(fornecedor, bucket){
 
   const tableRows = items.map(it=>`<tr>
     <td style="font-weight:600;color:#111">${it.emp}</td>
+    <td>${it.setor}</td>
     <td>${it.projeto}</td>
     <td>${it.obs}</td>
-    <td>${it.setor}</td>
     <td>${it.prazo}</td>
   </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:#999;padding:22px">Nenhum projeto encontrado.</td></tr>`;
 
@@ -4249,7 +4249,7 @@ function openFornStatusModal(fornecedor, bucket){
       <div class="emp-modal-body">
         <table>
           <thead><tr>
-            <th>Empreendimento</th><th>Projeto</th><th>Observações</th><th>Setor</th><th>Prazo</th>
+            <th>Empreendimento</th><th>Setor</th><th>Projeto</th><th>Observações</th><th>Prazo</th>
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
@@ -4817,7 +4817,13 @@ function buildNNPage(){
   const total = NN_DATA.length;
   const visitados = NN_DATA.filter(d=>d.visita==='SIM').length;
   const comRel = NN_DATA.filter(d=>d.v1).length;
-  const semRel = NN_DATA.filter(d=>!d.v1 && d.visita==='SIM').length;
+  // "Em Elaboração" agora lê diretamente a coluna STATUS da planilha (igual
+  // ao badge exibido na tabela), em vez da heurística antiga baseada em
+  // visita+relatório, que podia divergir do valor real da planilha.
+  const semRel = NN_DATA.filter(d=>{
+    const s=(d.status||'').trim().toUpperCase();
+    return s==='EM ELABORAÇÃO' || s==='EM ELABORACAO';
+  }).length;
   const semVisita = NN_DATA.filter(d=>d.visita==='NÃO').length;
   // "PAUSADO" na coluna STATUS da planilha é contado no resumo como "Descartado".
   const descartado = NN_DATA.filter(d=>(d.status||'').trim().toUpperCase()==='PAUSADO').length;
