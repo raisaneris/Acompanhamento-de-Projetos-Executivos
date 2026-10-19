@@ -1276,7 +1276,7 @@ const SHEETS_ID = "1uYWzzbdqzUQx5OIevIGDpLhwHRE9SAHl9arAwMfc728";
 //   sheetTab: nome EXATO da aba na planilha Google Sheets
 //   logo: (opcional) data URL base64 do logo; se omitido usa placeholder
 // Nova nomenclatura das abas da planilha (out/2026):
-//   CORIV, CSTMA, TIAEX, CLKEN, MARLU, JABRO, IGUAT, TIAII, BARII, THZAL
+//   CORIV, CSTMA, TIAEX, CLKEN, MARLU, JABRO, IGUAT, BARII, SLIRC, THZAL
 // Os `code` (3 letras) seguem estáveis para preservar IDs do DOM, estado e
 // seletores; apenas o `sheetTab` foi atualizado.
 const EMPREENDIMENTOS = [
@@ -1287,8 +1287,8 @@ const EMPREENDIMENTOS = [
   { code:'MLU', name:'MARCOS LUCIANO',    sheetTab:'MARLU' },
   { code:'JBR', name:'JANE BRODER',       sheetTab:'JABRO' },
   { code:'IGT', name:'IGUATU',            sheetTab:'IGUAT' },
-  { code:'TII', name:'TIANGUÁ II',        sheetTab:'TIAII' },
   { code:'BII', name:'BARREIRINHAS II',   sheetTab:'BARII' },
+  { code:'SLI', name:'SÃO LUÍS ILHA RACE',sheetTab:'SLIRC' },
   { code:'TAL', name:'TERESINA ALEGRE',   sheetTab:'THZAL' },
 ];
 
@@ -3863,7 +3863,11 @@ function buildContracts(){
 
   // summary cards
   let cardsHtml='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:24px">';
-  const empOrder=['RIVIERA','COSTA MARE','EXCLUSIVE TIANGUÁ','KENNEDY','MARCOS LUCIANO','JANE BRODER','TERESINA','EMPREENDIMENTO PARNAIBA VII','BARREIRINHAS II','FRECHEIRINHA II','IGUATU','BR LIFE','PROSPECCAO DE NEGOCIOS'];
+  const empOrderBase=['RIVIERA','COSTA MARE','EXCLUSIVE TIANGUÁ','KENNEDY','MARCOS LUCIANO','JANE BRODER','TERESINA','EMPREENDIMENTO PARNAIBA VII','BARREIRINHAS II','FRECHEIRINHA II','IGUATU','BR LIFE','PROSPECCAO DE NEGOCIOS'];
+  // Mostra um card para TODO empreendimento presente na aba MEDIÇÕES:
+  // primeiro os da ordem fixa, depois os demais em ordem alfabética.
+  const empOrder=[...empOrderBase,
+    ...Object.keys(empMap).filter(k=>k && !empOrderBase.includes(k)).sort()];
   empOrder.forEach(emp=>{
     const d=empMap[emp];
     if(!d)return;
