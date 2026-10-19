@@ -1276,7 +1276,7 @@ const SHEETS_ID = "1uYWzzbdqzUQx5OIevIGDpLhwHRE9SAHl9arAwMfc728";
 //   sheetTab: nome EXATO da aba na planilha Google Sheets
 //   logo: (opcional) data URL base64 do logo; se omitido usa placeholder
 // Nova nomenclatura das abas da planilha (out/2026):
-//   CORIV, CSTMA, TIAEX, CLKEN, MARLU, JABRO, IGUAT, TIAII, BARII, THZMC
+//   CORIV, CSTMA, TIAEX, CLKEN, MARLU, JABRO, IGUAT, TIAII, BARII, THZAL
 // Os `code` (3 letras) seguem estáveis para preservar IDs do DOM, estado e
 // seletores; apenas o `sheetTab` foi atualizado.
 const EMPREENDIMENTOS = [
@@ -1289,12 +1289,9 @@ const EMPREENDIMENTOS = [
   { code:'IGT', name:'IGUATU',            sheetTab:'IGUAT' },
   { code:'TII', name:'TIANGUÁ II',        sheetTab:'TIAII' },
   { code:'BII', name:'BARREIRINHAS II',   sheetTab:'BARII' },
-  { code:'SPT', name:'SÍTIO PASSATEMPO',  sheetTab:'THZMC' },
-  { code:'RPA', name:'RAPOSA ARMANDO',    sheetTab:'RPARM' },
-  { code:'SLI', name:'SÃO LUÍS ILHA RACE',sheetTab:'SLIRC' },
-  { code:'CRL', name:'CARIRI LIFE',       sheetTab:'CARLF' },
-  { code:'ZDT', name:'ZÉ DANTAS',         sheetTab:'ZEDAT' },
+  { code:'TAL', name:'TERESINA ALEGRE',   sheetTab:'THZAL' },
 ];
+
 
 const SHEETS_TABS = Object.fromEntries([
   ...EMPREENDIMENTOS.map(e => [e.code, e.sheetTab]),
