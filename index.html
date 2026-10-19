@@ -2,6 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
 <title>Conviver Urbanismo — Acompanhamento de Projetos</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1760,7 +1763,7 @@ async function fetchPNSheet(){
   throw new Error(`PROSPECÇÃO: nenhuma estratégia funcionou (nome "${PN_TAB_NAME}" e gid ${PN_GID}). Última falha: ${lastErr?.message || lastErr}`);
 }
 
-const CACHE_KEY = "conviver_sheets_cache_v19";
+const CACHE_KEY = "conviver_sheets_cache_v20"; // v20: lista de empreendimentos de out/2026
 const CACHE_TTL = 5*60*1000; // 5 minutes
 
 function _gvizUrl(sheetName){
@@ -2489,7 +2492,11 @@ async function reloadAllFromSheets(forceRefresh){
 
   // Load succeeded — apply data
   try {
-    Object.assign(D, result.data);
+    // Descarta chaves de empreendimentos que saíram do registro central
+    // (ex.: dados antigos guardados no navegador antes da atualização).
+    const _validKeys = new Set([...EK, 'GE', 'DVT']);
+    Object.keys(D).forEach(k=>{ if(!_validKeys.has(k)) delete D[k]; });
+    Object.keys(result.data||{}).forEach(k=>{ if(_validKeys.has(k)) D[k] = result.data[k]; });
     CONTRATOS.length = 0;
     if(result.contracts) result.contracts.forEach(c=>CONTRATOS.push(c));
     NN_DATA.length = 0;
